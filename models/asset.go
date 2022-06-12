@@ -8,5 +8,5 @@ type Asset struct {
 	App      App
 	FileName string
 	Path     string `gorm:"uniqueIndex"`
-	Size     int32
+	Size     int64
 }

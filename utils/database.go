@@ -21,18 +21,20 @@ func GetGDB() *gorm.DB {
 	connStr := os.Getenv("PGSQL_CONN_STR")
 	maxOpenConns, err := strconv.Atoi(os.Getenv("PGSQL_MAX_OPEN_CONNS"))
 	if connStr == "" || err != nil {
-		log.Fatalf("Invalid PGSQL settings: %v", err)
+		log.Fatal("Invalid PGSQL settings", err)
 	}
 
 	sdb, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatalf("Can't open SQL conn: %v", err)
+		log.Fatal("Can't open SQL conn", err)
 	}
 	sdb.SetMaxOpenConns(maxOpenConns)
 
-	memoizedGDB, err := gorm.Open(postgres.New(postgres.Config{Conn: sdb}), &gorm.Config{})
+	memoizedGDB, err := gorm.Open(postgres.New(postgres.Config{Conn: sdb}), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
 	if err != nil {
-		log.Fatalf("Can't create GORM conn: %v", err)
+		log.Fatal("Can't create GORM conn", err)
 	}
 	return memoizedGDB
 }
