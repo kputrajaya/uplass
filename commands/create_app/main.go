@@ -13,7 +13,7 @@ func main() {
 	godotenv.Load()
 
 	if len(os.Args) < 3 {
-		log.Fatal("Provide app key and secret as first and second args.")
+		log.Fatal("Provide app key and secret as first and second args")
 	}
 
 	db := utils.GetGDB()
