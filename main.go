@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	godotenv.Load()
+	rand.Seed(time.Now().UnixNano())
 
 	app := fiber.New()
 
