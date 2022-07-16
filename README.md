@@ -2,7 +2,7 @@
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kputrajaya_uplass&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kputrajaya_uplass)
 
-Image upload API, storage, and delivery for multiple apps.
+Asset upload API, storage, and delivery for multiple apps.
 
 ## Built With
 
