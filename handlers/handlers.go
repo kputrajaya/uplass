@@ -74,6 +74,9 @@ func UploadAsset(c fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "File is not valid")
 	}
+	if fileHeader.Size == 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "File is empty")
+	}
 	if fileHeader.Size > FileSizeMax {
 		return fiber.NewError(fiber.StatusBadRequest, "File is too large")
 	}

@@ -153,6 +153,11 @@ func TestUploadAssetRejectsBadRequests(t *testing.T) {
 			fiber.StatusBadRequest, "File is not valid")
 	})
 
+	t.Run("empty file", func(t *testing.T) {
+		expectMessage(t, doUpload(t, app, "some-token", "empty.png", []byte{}),
+			fiber.StatusBadRequest, "File is empty")
+	})
+
 	t.Run("file too large", func(t *testing.T) {
 		content := bytes.Repeat([]byte{'a'}, FileSizeMax+1)
 		expectMessage(t, doUpload(t, app, "some-token", "big.bin", content),
