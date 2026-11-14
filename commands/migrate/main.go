@@ -12,7 +12,6 @@ func main() {
 	db := utils.GetGDB()
 	db.AutoMigrate(
 		&models.App{},
-		&models.Asset{},
 		&models.Token{},
 	)
 }

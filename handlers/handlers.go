@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/subtle"
+	"errors"
 	"log"
 	"os"
 	"time"
@@ -9,10 +11,13 @@ import (
 	"github.com/kputrajaya/uplass/models"
 	"github.com/kputrajaya/uplass/utils"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-const tokenExpiryHour = 3
-const fileSizeMax = 10 * 1024 * 1024
+const TokenExpiryHour = 3
+const FileSizeMax = 10 * 1024 * 1024
+
+var uploadToS3 = utils.UploadToS3
 
 func Ping(c *fiber.Ctx) error {
 	return c.SendString("Pong")
@@ -22,7 +27,6 @@ func GetToken(c *fiber.Ctx) error {
 	// Parse body
 	data := models.App{}
 	if err := c.BodyParser(&data); err != nil {
-		log.Println(err)
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse body")
 	}
 	if data.AppKey == "" || data.AppSecret == "" {
@@ -31,11 +35,18 @@ func GetToken(c *fiber.Ctx) error {
 
 	db := utils.GetGDB()
 
-	// Validate key and secret
+	// Validate key and secret; the secret is compared in Go so it never reaches the database
 	app := models.App{}
-	db.Where("app_key = ? AND app_secret = ?", data.AppKey, utils.HashString(data.AppSecret)).Limit(1).Find(&app)
-	if app.ID == 0 {
-		return fiber.NewError(fiber.StatusBadRequest, "App with given key and secret not found")
+	err := db.Select("id", "app_secret").Where("app_key = ?", data.AppKey).Take(&app).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fiber.NewError(fiber.StatusBadRequest, "App is not valid")
+	}
+	if err != nil {
+		log.Println(err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to validate app")
+	}
+	if subtle.ConstantTimeCompare([]byte(app.AppSecret), []byte(utils.HashString(data.AppSecret))) != 1 {
+		return fiber.NewError(fiber.StatusBadRequest, "App is not valid")
 	}
 
 	// Create token
@@ -50,57 +61,45 @@ func GetToken(c *fiber.Ctx) error {
 func UploadAsset(c *fiber.Ctx) error {
 	tokenValue := c.FormValue("token")
 	if tokenValue == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Token is not valid")
+		return fiber.NewError(fiber.StatusBadRequest, "Token not provided")
 	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		log.Println(err)
 		return fiber.NewError(fiber.StatusBadRequest, "File is not valid")
 	}
-	if fileHeader.Size > fileSizeMax {
+	if fileHeader.Size > FileSizeMax {
 		return fiber.NewError(fiber.StatusBadRequest, "File is too large")
 	}
 
-	path := ""
 	db := utils.GetGDB()
-	err = db.Transaction(func(tx *gorm.DB) error {
-		// Validate token
-		token := models.Token{}
-		firstValidDate := time.Now().Add(-tokenExpiryHour * time.Hour)
-		db.Joins("App").Where("tokens.value = ? AND tokens.used = ? AND tokens.created_at >= ?", tokenValue, false, firstValidDate).Limit(1).Find(&token)
-		if token.ID == 0 {
-			return fiber.NewError(fiber.StatusBadRequest, "Valid token with given value not found")
-		}
 
-		// Mark token as used
-		token.Used = true
-		if err := db.Save(&token).Error; err != nil {
-			log.Println(err)
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to use token")
-		}
+	// Validate and mark token as used atomically
+	firstValidDate := time.Now().Add(-TokenExpiryHour * time.Hour)
+	token := models.Token{}
+	res := db.Model(&token).
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "app_id"}}}).
+		Where("value = ? AND used = ? AND created_at >= ?", tokenValue, false, firstValidDate).
+		Update("used", true)
+	if res.Error != nil {
+		log.Println(res.Error)
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to use token")
+	}
+	if res.RowsAffected == 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "Token is not valid")
+	}
 
-		// Save to asset
-		prefix := token.App.AppKey + time.Now().Format("/2006/01/02/") + utils.RandomString(5) + "/"
-		path = prefix + fileHeader.Filename
-		asset := models.Asset{AppID: token.AppID, FileName: fileHeader.Filename, Path: path, Size: fileHeader.Size}
-		if err := db.Create(&asset).Error; err != nil {
-			log.Println(err)
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to create asset")
-		}
+	app := models.App{}
+	if err := db.Select("app_key").Take(&app, token.AppID).Error; err != nil {
+		log.Println(err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load app")
+	}
 
-		// Upload to S3
-		err = utils.UploadToS3(fileHeader, prefix)
-		if err != nil {
-			log.Println(err)
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to upload asset")
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
+	prefix := app.AppKey + time.Now().Format("/2006/01/02/") + utils.RandomString(5) + "/"
+	if err := uploadToS3(fileHeader, prefix); err != nil {
+		log.Println(err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to upload asset")
 	}
 
 	host := os.Getenv("ASSET_HOST")
-	return c.SendString(host + path)
+	return c.SendString(host + prefix + fileHeader.Filename)
 }

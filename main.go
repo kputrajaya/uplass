@@ -17,7 +17,9 @@ func main() {
 	godotenv.Load()
 	rand.Seed(time.Now().UnixNano())
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: handlers.FileSizeMax + (1 << 20),
+	})
 
 	app.Use(compress.New())
 	app.Use(cors.New())
