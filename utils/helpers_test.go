@@ -66,8 +66,10 @@ func TestRandomString(t *testing.T) {
 	})
 
 	t.Run("successive calls differ", func(t *testing.T) {
-		if RandomString(50) == RandomString(50) {
-			t.Fatal("two RandomString calls returned the same value")
+		first := RandomString(50)
+		second := RandomString(50)
+		if first == second {
+			t.Fatalf("two RandomString calls returned the same value: %q", first)
 		}
 	})
 }

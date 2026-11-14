@@ -2,7 +2,7 @@ package utils
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"mime/multipart"
@@ -62,7 +62,7 @@ func UploadToS3(fileHeader *multipart.FileHeader, prefix string) error {
 	if err != nil {
 		return err
 	}
-	fileBytes, err := ioutil.ReadAll(file)
+	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		return err
 	}

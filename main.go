@@ -2,9 +2,7 @@ package main
 
 import (
 	"log"
-	"math/rand"
 	"os"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -15,7 +13,6 @@ import (
 
 func main() {
 	godotenv.Load()
-	rand.Seed(time.Now().UnixNano())
 
 	app := fiber.New(fiber.Config{
 		BodyLimit: handlers.FileSizeMax + (1 << 20),
