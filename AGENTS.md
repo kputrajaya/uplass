@@ -5,7 +5,7 @@ Asset upload API, storage, and delivery for multiple apps. Apps swap an app key/
 ## Stack
 
 - Go modules (`github.com/kputrajaya/uplass`), Fiber v2, GORM + `lib/pq` (Postgres), AWS SDK v1 (S3), `godotenv`
-- Multi-stage `Dockerfile`: `golang:1.18-alpine` builder, `scratch` runtime, `EXPOSE 8080`
+- Multi-stage `Dockerfile`: `golang:1.26-alpine` builder, `scratch` runtime, `EXPOSE 8080`
 
 ## Layout
 
@@ -95,7 +95,7 @@ ASSET_HOST              # public base URL, include trailing slash
 
 ## Conventions
 
-- Never hand-edit `go.mod` / `go.sum`; `go.mod` declares `go 1.17` and the Dockerfile pins `golang:1.18` — bump deliberately, not as a drive-by.
+- Never hand-edit `go.mod` / `go.sum`; `go.mod` declares `go 1.26.0` and the Dockerfile pins `golang:1.26` — bump deliberately, not as a drive-by. Several deps (`golang.org/x/*`, `fasthttp`) already require 1.26, so the directive cannot go lower without downgrading them.
 - Keep `main.go` route table and `newTestApp()` in `handlers/handlers_test.go` in sync when adding routes.
 - Untracked: `.env`, build output, `*.log`, `.vscode`, `__debug_bin` (see `.gitignore`).
 - `sample-image.jpg` exists for `test.http` uploads — it is test data, not an asset to serve.
