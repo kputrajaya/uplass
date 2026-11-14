@@ -63,6 +63,11 @@ func UploadToS3(fileHeader *multipart.FileHeader, prefix string) error {
 	client := s3.NewFromConfig(aws.Config{
 		Region:      awsRegion,
 		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+	}, func(o *s3.Options) {
+		if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		}
 	})
 	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      aws.String(awsBucket),

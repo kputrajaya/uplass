@@ -11,9 +11,7 @@ import (
 	"github.com/kputrajaya/uplass/handlers"
 )
 
-func main() {
-	godotenv.Load()
-
+func newApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit: handlers.FileSizeMax + (1 << 20),
 	})
@@ -26,9 +24,17 @@ func main() {
 	app.Post("/token", handlers.GetToken)
 	app.Post("/upload", handlers.UploadAsset)
 
-	listenAddress := "localhost:8080"
+	return app
+}
+
+func listenAddress() string {
 	if port := os.Getenv("PORT"); port != "" {
-		listenAddress = ":" + port
+		return ":" + port
 	}
-	log.Fatal(app.Listen(listenAddress))
+	return "localhost:8080"
+}
+
+func main() {
+	godotenv.Load()
+	log.Fatal(newApp().Listen(listenAddress()))
 }

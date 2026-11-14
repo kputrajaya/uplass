@@ -16,6 +16,7 @@ import (
 const TokenExpiryHour = 3
 const FileSizeMax = 10 * 1024 * 1024
 
+var getGDB = utils.GetGDB
 var uploadToS3 = utils.UploadToS3
 
 func Ping(c fiber.Ctx) error {
@@ -32,7 +33,7 @@ func GetToken(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "App key or secret not provided")
 	}
 
-	db := utils.GetGDB()
+	db := getGDB()
 
 	// Validate key and secret; the secret is compared in Go so it never reaches the database
 	app := models.App{}
@@ -70,7 +71,7 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "File is too large")
 	}
 
-	db := utils.GetGDB()
+	db := getGDB()
 
 	// Validate and mark token as used atomically
 	firstValidDate := time.Now().Add(-TokenExpiryHour * time.Hour)

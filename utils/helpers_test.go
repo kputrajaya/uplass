@@ -1,6 +1,12 @@
 package utils
 
 import (
+	"bytes"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -15,6 +21,9 @@ func TestHashSecret(t *testing.T) {
 	}
 	if !strings.HasPrefix(hashed, "$2") {
 		t.Fatalf("HashSecret = %q, want a bcrypt hash", hashed)
+	}
+	if !strings.HasPrefix(hashed, "$2a$12$") {
+		t.Fatalf("HashSecret = %q, want cost 12", hashed)
 	}
 
 	second, err := HashSecret("s3cret")
@@ -41,8 +50,14 @@ func TestVerifySecret(t *testing.T) {
 	if VerifySecret(hashed, "") {
 		t.Fatal("VerifySecret accepted an empty secret")
 	}
+	if VerifySecret(hashed, "S3cret") {
+		t.Fatal("VerifySecret is case insensitive")
+	}
 	if VerifySecret("", "s3cret") {
 		t.Fatal("VerifySecret accepted an empty stored hash")
+	}
+	if VerifySecret("not-a-bcrypt-hash", "s3cret") {
+		t.Fatal("VerifySecret accepted a non-bcrypt stored hash")
 	}
 }
 
@@ -73,5 +88,110 @@ func TestRandomString(t *testing.T) {
 		if first == second {
 			t.Fatalf("two RandomString calls returned the same value: %q", first)
 		}
+	})
+
+	t.Run("values are unique", func(t *testing.T) {
+		seen := make(map[string]struct{}, 1000)
+		for i := 0; i < 1000; i++ {
+			s := RandomString(50)
+			if _, dup := seen[s]; dup {
+				t.Fatalf("duplicate value on iteration %d: %q", i, s)
+			}
+			seen[s] = struct{}{}
+		}
+	})
+
+	t.Run("exact Text boundary", func(t *testing.T) {
+		for _, n := range []uint{1, 5, 25, 26, 27, 51, 52} {
+			if got := RandomString(n); uint(len(got)) != n {
+				t.Fatalf("len(RandomString(%d)) = %d, want %d", n, len(got), n)
+			}
+		}
+	})
+}
+
+func fileHeader(t *testing.T, filename string, content []byte) *multipart.FileHeader {
+	t.Helper()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if err := req.ParseMultipartForm(32 << 20); err != nil {
+		t.Fatalf("parse multipart form: %v", err)
+	}
+	_, header, err := req.FormFile("file")
+	if err != nil {
+		t.Fatalf("form file: %v", err)
+	}
+	return header
+}
+
+func TestUploadToS3(t *testing.T) {
+	t.Setenv("AWS_BUCKET", "test-bucket")
+	t.Setenv("AWS_REGION", "ap-southeast-1")
+	t.Setenv("AWS_ACCESS_KEY", "key")
+	t.Setenv("AWS_SECRET_KEY", "secret")
+
+	t.Run("puts object under the prefix", func(t *testing.T) {
+		var gotPath string
+		var gotBody []byte
+		var gotContentType string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			gotContentType = r.Header.Get("Content-Type")
+			gotBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+		t.Setenv("AWS_ENDPOINT", server.URL)
+
+		header := fileHeader(t, "pic.png", []byte("hello"))
+		if err := UploadToS3(header, "app-key/2026/01/01/ABCDE/"); err != nil {
+			t.Fatalf("UploadToS3: %v", err)
+		}
+
+		if want := "/test-bucket/app-key/2026/01/01/ABCDE/pic.png"; gotPath != want {
+			t.Fatalf("path = %q, want %q", gotPath, want)
+		}
+		if string(gotBody) != "hello" {
+			t.Fatalf("body = %q, want %q", gotBody, "hello")
+		}
+		if !strings.HasPrefix(gotContentType, "text/plain") {
+			t.Fatalf("content type = %q, want text/plain*", gotContentType)
+		}
+	})
+
+	t.Run("returns upload errors", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+		t.Setenv("AWS_ENDPOINT", server.URL)
+
+		header := fileHeader(t, "pic.png", []byte("hello"))
+		if err := UploadToS3(header, "app-key/"); err == nil {
+			t.Fatal("UploadToS3 returned nil for a failing endpoint")
+		}
+	})
+}
+
+func TestUploadToS3FatalOnMissingConfig(t *testing.T) {
+	runFatalCase(t, "UPLASS_HELPER_S3_NO_CONFIG", "Invalid AWS settings", func() {
+		for _, key := range []string{"AWS_BUCKET", "AWS_REGION", "AWS_ACCESS_KEY", "AWS_SECRET_KEY"} {
+			os.Unsetenv(key)
+		}
+		_ = UploadToS3(&multipart.FileHeader{}, "prefix/")
 	})
 }

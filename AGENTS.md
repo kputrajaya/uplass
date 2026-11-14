@@ -13,7 +13,10 @@ Asset upload API, storage, and delivery for multiple apps. Apps swap an app key/
 | --- | --- |
 | `main.go` | Fiber app, middleware (compress, CORS), routes, listen address |
 | `handlers/handlers.go` | `Ping`, `GetToken`, `UploadAsset` + limits |
-| `handlers/handlers_test.go` | Handler tests incl. DB integration cases |
+| `handlers/handlers_test.go` | Handler tests: guards + full flow on in-memory SQLite |
+| `main_test.go` | Route wiring, CORS, listen-address selection |
+| `utils/database_test.go` | `GetGDB` fatal paths (subprocess) |
+| `utils/helpers_test.go` | bcrypt, RNG, S3 upload against a local HTTP server |
 | `models/app.go`, `models/token.go` | GORM models (`apps`, `tokens`) |
 | `utils/database.go` | Memoized `*gorm.DB` from env |
 | `utils/helpers.go` | `HashSecret`, `VerifySecret`, `RandomString`, `UploadToS3` |
@@ -31,9 +34,6 @@ go test ./...                      # unit tests; DB cases skip unless env set
 go run .                           # serve on localhost:8080, or :$PORT when PORT set
 go run ./commands/migrate          # create/update tables
 go run ./commands/hash_secret 'my-app-secret'   # prints bcrypt hash, no DB access
-
-# integration tests (disposable database only)
-TEST_PGSQL_CONN_STR='postgres://user:pass@host:5342/uplass_test?sslmode=require' go test ./handlers -v
 
 docker build -t uplass .
 docker run --rm -p 8080:8080 -e PORT=8080 --env-file .env uplass   # PORT needed: default bind is localhost:8080
@@ -57,6 +57,7 @@ Errors go through `fiber.NewError` with an explicit status; bodies are plain str
 - `RandomString` concatenates `crypto/rand.Text()` (unbiased uppercase base32) and truncates, so the 50-char upload token and the 5-char path segments are unpredictable. Don't swap it back to `math/rand` or a hand-rolled modulo pool.
 - `utils.GetGDB()` memoizes one pool via `postgres.Open(PGSQL_CONN_STR)` (pgx); it `log.Fatal`s if `PGSQL_CONN_STR` or `PGSQL_MAX_OPEN_CONNS` is missing/bad. Don't hand it a `database/sql` pool from another driver — the postgres driver speaks pgx and placeholder counts break.
 - `var uploadToS3 = utils.UploadToS3` in `handlers` is the test seam — keep it a package variable, tests replace it.
+- `var getGDB = utils.GetGDB` in `handlers` is the database seam — tests swap it for in-memory SQLite; production always uses the env-driven Postgres pool.
 - App deletion is a GORM soft delete: a token whose app is gone must fail the upload with 500, not silently succeed.
 
 ## App provisioning
@@ -85,14 +86,17 @@ AWS_REGION              # e.g. ap-southeast-1
 AWS_ACCESS_KEY
 AWS_SECRET_KEY
 ASSET_HOST              # public base URL, include trailing slash
+AWS_ENDPOINT            # optional: S3-compatible endpoint (MinIO / test server); path-style is enabled with it
 ```
 
 `main.go` and `commands/migrate` call `godotenv.Load()`, so `.env` in the working directory is picked up; `commands/hash_secret` reads no environment. Never commit real values or bucket credentials.
 
 ## Testing notes
 
-- `handlers` DB tests call `TEST_PGSQL_CONN_STR`, run `AutoMigrate`, then `TRUNCATE TABLE tokens, apps RESTART IDENTITY CASCADE`. Point it at a throwaway database — never production.
-- Without `TEST_PGSQL_CONN_STR` the DB tests skip, so `go test ./...` stays green offline.
+- No server, no CGO, no env vars: `go test ./...` runs everything. `handlers` swaps the `getGDB` seam for `github.com/glebarez/sqlite` in `:memory:` (single connection so the DB survives the test), so the whole token/upload flow — bcrypt verify, token creation, single-use marking, expiry, burned-on-failure, soft-deleted app — is covered without Postgres.
+- S3 is exercised against an `httptest` server via the optional `AWS_ENDPOINT` env var (also usable for MinIO); the normal upload path still goes to AWS.
+- `GetGDB`/`UploadToS3` fatal branches run in a child test-binary process, since `log.Fatal` would kill the test runner.
+- Still only verifiable against a real deployment: real Postgres quirks (pgx DSN/TLS), real S3 credentials and bucket policy.
 
 ## Conventions
 
