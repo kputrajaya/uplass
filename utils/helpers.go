@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,9 +20,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	bcryptCost     = 12
+	filenameMaxLen = 100
+	extMaxLen      = 25
+)
+
+var filenameUnsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
 // HashSecret is bcrypt, salt embedded in the hash
 func HashSecret(secret string) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), 12)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), bcryptCost)
 	if err != nil {
 		return "", err
 	}
@@ -42,21 +51,24 @@ func RandomString(length uint) string {
 	return out.String()[:length]
 }
 
-// SafeFilename keeps the last path component and drops control characters
+// SafeFilename keeps the last component, replaces unsafe chars, and caps the length
 func SafeFilename(name string) string {
 	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
-	name = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, name)
-
-	switch name {
-	case "", ".", "..", "/":
+	name = strings.Trim(filenameUnsafeChars.ReplaceAllString(name, "_"), ".")
+	if name == "" {
 		return "file"
 	}
-	return name
+
+	ext := path.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	if len(stem) > filenameMaxLen {
+		stem = stem[:filenameMaxLen]
+	}
+	stem = strings.Trim(stem, ".")
+	if len(ext) > extMaxLen {
+		ext = ""
+	}
+	return stem + ext
 }
 
 // UploadToS3 returns the stored path; build URLs from it, not from the request

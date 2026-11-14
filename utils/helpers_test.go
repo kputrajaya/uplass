@@ -117,17 +117,81 @@ func TestSafeFilename(t *testing.T) {
 		"../../etc/passwd":      "passwd",
 		`C:\Users\HomePC\a.txt`: "a.txt",
 		"dir/sub/file.jpg":      "file.jpg",
-		"a\x01b\x7f.png":        "ab.png",
+		"a\x01b\x7f.png":        "a_b_.png",
 		"":                      "file",
 		".":                     "file",
 		"..":                    "file",
-		"/":                     "file",
+		"/":                     "_",
+		"my photo.png":          "my_photo.png",
+		"a  b.png":              "a_b.png",
+		"rep#ort?.pdf":          "rep_ort_.pdf",
+		"写真.jpg":                "_.jpg",
+		".env":                  "env",
+		"..file..":              "file",
+		"a\nb.txt":              "a_b.txt",
+		"file..":                "file",
+		"a.txt...":              "a.txt",
+		"***":                   "_",
 	}
 	for in, want := range cases {
 		if got := SafeFilename(in); got != want {
 			t.Fatalf("SafeFilename(%q) = %q, want %q", in, got, want)
 		}
 	}
+
+	t.Run("keeps the stem at the limit", func(t *testing.T) {
+		in := strings.Repeat("a", filenameMaxLen) + ".png"
+		if got := SafeFilename(in); got != in {
+			t.Fatalf("got %q, want it unchanged", got)
+		}
+	})
+
+	t.Run("truncates the stem but keeps the extension", func(t *testing.T) {
+		ext := "." + strings.Repeat("x", extMaxLen-1)
+		got := SafeFilename(strings.Repeat("a", 300) + ext)
+		if len(got) != filenameMaxLen+extMaxLen {
+			t.Fatalf("len = %d, want %d", len(got), filenameMaxLen+extMaxLen)
+		}
+		if !strings.HasSuffix(got, ext) {
+			t.Fatalf("got %q, want the %q extension kept", got, ext)
+		}
+	})
+
+	t.Run("drops an extension over the limit", func(t *testing.T) {
+		ext := "." + strings.Repeat("x", extMaxLen)
+		got := SafeFilename(strings.Repeat("a", 300) + ext)
+		if len(got) != filenameMaxLen {
+			t.Fatalf("len = %d, want %d", len(got), filenameMaxLen)
+		}
+		if strings.Contains(got, ".") {
+			t.Fatalf("got %q, want no extension", got)
+		}
+	})
+
+	t.Run("trims a dot exposed by the cut", func(t *testing.T) {
+		got := SafeFilename(strings.Repeat("a", filenameMaxLen-1) + "." + strings.Repeat("b", 300))
+		if strings.HasSuffix(got, ".") {
+			t.Fatalf("got %q, want no trailing dot", got)
+		}
+	})
+
+	t.Run("output is URL-safe", func(t *testing.T) {
+		inputs := []string{
+			strings.Repeat("写", 300) + ".jpg",
+			strings.Repeat(" ", 50),
+			strings.Repeat("../", 40) + "x.png",
+			"\x00\x7f\n\t",
+		}
+		for _, in := range inputs {
+			got := SafeFilename(in)
+			if got == "" || filenameUnsafeChars.MatchString(got) {
+				t.Fatalf("SafeFilename(%q) = %q, want a non-empty URL-safe name", in, got)
+			}
+			if len(got) > filenameMaxLen+extMaxLen {
+				t.Fatalf("SafeFilename(%q) len = %d, want at most %d", in, len(got), filenameMaxLen+extMaxLen)
+			}
+		}
+	})
 }
 
 func TestUploadToS3(t *testing.T) {
