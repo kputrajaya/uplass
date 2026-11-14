@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/joho/godotenv"
 	"github.com/kputrajaya/uplass/handlers"
+	"github.com/kputrajaya/uplass/utils"
 )
 
 // newApp builds the real router for main and tests
@@ -55,6 +56,9 @@ func main() {
 	if err := validateConfig(); err != nil {
 		log.Fatal(err)
 	}
+
+	// Open the pool now so a malformed PGSQL_CONN_STR cannot kill the process mid-request
+	utils.GetGDB()
 
 	// SIGTERM drains in-flight requests before the process exits
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
