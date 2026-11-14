@@ -2,25 +2,25 @@ package utils
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
 	"io"
 	"log"
-	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const RandomCharPool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const SecretHashCost = 12
+const secretHashCost = 12
 
 func HashSecret(secret string) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), SecretHashCost)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), secretHashCost)
 	if err != nil {
 		return "", err
 	}
@@ -32,11 +32,11 @@ func VerifySecret(stored, candidate string) bool {
 }
 
 func RandomString(length uint) string {
-	bytes := make([]byte, length)
-	for i := range bytes {
-		bytes[i] = RandomCharPool[rand.Intn(len(RandomCharPool))]
+	var out strings.Builder
+	for uint(out.Len()) < length {
+		out.WriteString(rand.Text())
 	}
-	return string(bytes)
+	return out.String()[:length]
 }
 
 func UploadToS3(fileHeader *multipart.FileHeader, prefix string) error {
@@ -48,32 +48,27 @@ func UploadToS3(fileHeader *multipart.FileHeader, prefix string) error {
 		log.Fatal("Invalid AWS settings")
 	}
 
-	// Create AWS session
-	session, err := session.NewSession(&aws.Config{
-		Region:      aws.String(awsRegion),
-		Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
-	})
-	if err != nil {
-		return err
-	}
-
 	// Open file from header
 	file, err := fileHeader.Open()
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		return err
 	}
 
 	// Put file to S3
-	_, err = s3.New(session).PutObject(&s3.PutObjectInput{
-		Bucket:        aws.String(awsBucket),
-		Key:           aws.String(prefix + fileHeader.Filename),
-		Body:          bytes.NewReader(fileBytes),
-		ContentLength: aws.Int64(fileHeader.Size),
-		ContentType:   aws.String(http.DetectContentType(fileBytes)),
+	client := s3.NewFromConfig(aws.Config{
+		Region:      awsRegion,
+		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+	})
+	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket:      aws.String(awsBucket),
+		Key:         aws.String(prefix + fileHeader.Filename),
+		Body:        bytes.NewReader(fileBytes),
+		ContentType: aws.String(http.DetectContentType(fileBytes)),
 	})
 	return err
 }

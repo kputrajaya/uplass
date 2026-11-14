@@ -46,6 +46,8 @@ func TestVerifySecret(t *testing.T) {
 	}
 }
 
+const base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
 func TestRandomString(t *testing.T) {
 	t.Run("length and charset", func(t *testing.T) {
 		got := RandomString(50)
@@ -53,8 +55,8 @@ func TestRandomString(t *testing.T) {
 			t.Fatalf("len(RandomString(50)) = %d, want 50", len(got))
 		}
 		for _, r := range got {
-			if !strings.ContainsRune(RandomCharPool, r) {
-				t.Fatalf("RandomString produced character %q outside pool", r)
+			if !strings.ContainsRune(base32Alphabet, r) {
+				t.Fatalf("RandomString produced character %q outside the base32 alphabet", r)
 			}
 		}
 	})
