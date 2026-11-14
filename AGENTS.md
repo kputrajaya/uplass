@@ -58,7 +58,7 @@ Errors go through `fiber.NewError` with an explicit status; bodies are plain str
 - **S3 layout** `<app_key>/YYYY/MM/DD/<10 random chars>/<original filename>`; `utils.SafeFilename` strips directory components and control characters first. `UploadToS3` **returns the file path it wrote** (the S3 object key) and the handler builds the public URL from that return value (`ASSET_HOST + filePath`) — never recompute it at the call site.
 - **S3 uploads time out after 30 s** (inline in `UploadToS3`); a stalled bucket returns 500 instead of hanging the request.
 - `RandomString` concatenates `crypto/rand.Text()` (unbiased uppercase base32) and truncates, so the 50-char upload token and the 10-char path segments are unpredictable. Don't swap it back to `math/rand` or a hand-rolled modulo pool.
-- `utils.GetGDB()` memoizes one pool via `postgres.Open(PGSQL_CONN_STR)` (pgx); it `log.Fatal`s if `PGSQL_CONN_STR` or `PGSQL_MAX_OPEN_CONNS` is missing/bad. Don't hand it a `database/sql` pool from another driver — the postgres driver speaks pgx and placeholder counts break.
+- `utils.GetGDB()` memoizes one pool via `postgres.Open(PGSQL_CONN_STR)` (pgx) behind `sync.Once`; `PGSQL_MAX_OPEN_CONNS` must be `> 0` and the pool recycles connections every 5 min. It `log.Fatal`s if the settings are missing/bad, but `main()` runs `validateConfig()` first so a misconfigured instance never passes the `/ping` health check. Don't hand it a `database/sql` pool from another driver — the postgres driver speaks pgx and placeholder counts break.
 - `var uploadToS3 = utils.UploadToS3` in `handlers` is the test seam — keep it a package variable, tests replace it.
 - `var getGDB = utils.GetGDB` in `handlers` is the database seam — tests swap it for in-memory SQLite; production always uses the env-driven Postgres pool.
 - App deletion is a GORM soft delete: a token whose app is gone must fail the upload with 500, not silently succeed.
@@ -112,6 +112,8 @@ PORT                    # optional: default bind is localhost:8080, containers n
 
 - Never hand-edit `go.mod` / `go.sum`; `go.mod` declares `go 1.26.0` and the Dockerfile pins `golang:1.26` — bump deliberately, not as a drive-by. Several deps (`golang.org/x/*`, `fasthttp`) already require 1.26, so the directive cannot go lower without downgrading them.
 - Keep `main.go` route table and `newTestApp()` in `handlers/helpers_test.go` in sync when adding routes.
+- Comments end without a trailing period
+- Exported functions first, unexported helpers at the bottom of each file
 - Untracked: `.env`, build output, `*.log`, `.vscode`, `__debug_bin` (see `.gitignore`).
 - `sample-image.jpg` exists for `test.http` uploads — it is test data, not an asset to serve.
 

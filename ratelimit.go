@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 )
 
-// rateLimiter allows max requests per client per window.
+// rateLimiter allows max requests per client per window
 func rateLimiter(max int) fiber.Handler {
 	return limiter.New(limiter.Config{
 		Max:          max,
@@ -22,7 +22,7 @@ func rateLimiter(max int) fiber.Handler {
 }
 
 // clientKey uses the last X-Forwarded-For entry: Cloud Run appends the real
-// client and earlier entries are caller-supplied.
+// client and earlier entries are caller-supplied
 func clientKey(c fiber.Ctx) string {
 	xff := c.Get(fiber.HeaderXForwardedFor)
 	if i := strings.LastIndexByte(xff, ','); i >= 0 {

@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -14,10 +16,9 @@ import (
 )
 
 const (
-	// FileSizeMax caps one uploaded file; BodyLimit adds 1 MiB for framing.
-	FileSizeMax = 10 * 1024 * 1024
-	// TokenExpiryHour is how long an upload token stays usable.
+	FileSizeMax     = 10 * 1024 * 1024
 	TokenExpiryHour = 3
+	dbTimeout       = 10 * time.Second
 )
 
 var (
@@ -29,7 +30,7 @@ func Ping(c fiber.Ctx) error {
 	return c.SendString("Pong")
 }
 
-// GetToken returns a single-use token; the secret is compared here, never in SQL.
+// GetToken returns a single-use token; the secret is compared here, never in SQL
 func GetToken(c fiber.Ctx) error {
 	body := models.App{}
 	if err := c.Bind().Body(&body); err != nil {
@@ -39,7 +40,8 @@ func GetToken(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "App key or secret not provided")
 	}
 
-	db := getGDB()
+	db, cancel := requestDB(c)
+	defer cancel()
 
 	app := models.App{}
 	err := db.Select("id", "app_secret").Where("app_key = ?", body.AppKey).Take(&app).Error
@@ -62,7 +64,7 @@ func GetToken(c fiber.Ctx) error {
 	return c.SendString(token.Value)
 }
 
-// UploadAsset spends the token before uploading: a failed upload burns it.
+// UploadAsset spends the token before uploading: a failed upload burns it
 func UploadAsset(c fiber.Ctx) error {
 	tokenValue := c.FormValue("token")
 	if tokenValue == "" {
@@ -76,9 +78,10 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "File is too large")
 	}
 
-	db := getGDB()
+	db, cancel := requestDB(c)
+	defer cancel()
 
-	// Claim the token atomically so a concurrent upload cannot reuse it.
+	// Claim the token atomically so a concurrent upload cannot reuse it
 	token := models.Token{}
 	res := db.Model(&token).
 		Clauses(clause.Returning{Columns: []clause.Column{{Name: "app_id"}}}).
@@ -98,7 +101,7 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load app")
 	}
 
-	// Object path: <app_key>/YYYY/MM/DD/<10 random chars>/<filename>.
+	// Object path: <app_key>/YYYY/MM/DD/<10 random chars>/<filename>
 	prefix := app.AppKey + time.Now().Format("/2006/01/02/") + utils.RandomString(10) + "/"
 	filePath, err := uploadToS3(fileHeader, prefix)
 	if err != nil {
@@ -106,5 +109,12 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to upload asset")
 	}
 
-	return c.SendString(os.Getenv("ASSET_HOST") + filePath)
+	assetHost := strings.TrimRight(os.Getenv("ASSET_HOST"), "/") + "/"
+	return c.SendString(assetHost + filePath)
+}
+
+// requestDB scopes the pool to a bounded context; callers defer the cancel
+func requestDB(c fiber.Ctx) (*gorm.DB, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(c.Context(), dbTimeout)
+	return getGDB().WithContext(ctx), cancel
 }

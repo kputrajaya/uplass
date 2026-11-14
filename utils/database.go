@@ -4,22 +4,24 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-var memoizedGDB *gorm.DB
+var getGDB = sync.OnceValue(openGDB)
 
-// GetGDB returns the process-wide pool; misconfiguration is fatal.
+// GetGDB returns the process-wide pool
 func GetGDB() *gorm.DB {
-	if memoizedGDB != nil {
-		return memoizedGDB
-	}
+	return getGDB()
+}
 
+func openGDB() *gorm.DB {
 	connStr := os.Getenv("PGSQL_CONN_STR")
 	maxOpenConns, err := strconv.Atoi(os.Getenv("PGSQL_MAX_OPEN_CONNS"))
-	if connStr == "" || err != nil {
+	if connStr == "" || err != nil || maxOpenConns <= 0 {
 		log.Fatal("Invalid PGSQL settings", err)
 	}
 
@@ -35,7 +37,9 @@ func GetGDB() *gorm.DB {
 		log.Fatal("Can't get SQL pool", err)
 	}
 	sdb.SetMaxOpenConns(maxOpenConns)
+	sdb.SetMaxIdleConns(maxOpenConns)
+	// Recycle connections so TLS handshakes and DB-side failovers stay fresh
+	sdb.SetConnMaxLifetime(5 * time.Minute)
 
-	memoizedGDB = gdb
-	return memoizedGDB
+	return gdb
 }

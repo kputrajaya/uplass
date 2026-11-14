@@ -201,7 +201,8 @@ func TestUploadAsset(t *testing.T) {
 
 	t.Run("asset host comes from env", func(t *testing.T) {
 		f := newFixture(t, nil)
-		t.Setenv("ASSET_HOST", "https://other.test/")
+		// No trailing slash: handlers normalise it
+		t.Setenv("ASSET_HOST", "https://other.test")
 
 		body := expectStatus(t, doUpload(t, f.app, f.token.Value, "pic.png", []byte("hello")), fiber.StatusOK)
 		if want := "https://other.test/" + f.upload.prefix + "pic.png"; body != want {

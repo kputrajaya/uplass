@@ -110,34 +110,6 @@ func TestRandomString(t *testing.T) {
 	})
 }
 
-func fileHeader(t *testing.T, filename string, content []byte) *multipart.FileHeader {
-	t.Helper()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filename)
-	if err != nil {
-		t.Fatalf("create form file: %v", err)
-	}
-	if _, err := part.Write(content); err != nil {
-		t.Fatalf("write content: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/", body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	if err := req.ParseMultipartForm(32 << 20); err != nil {
-		t.Fatalf("parse multipart form: %v", err)
-	}
-	_, header, err := req.FormFile("file")
-	if err != nil {
-		t.Fatalf("form file: %v", err)
-	}
-	return header
-}
-
 func TestSafeFilename(t *testing.T) {
 	cases := map[string]string{
 		"pic.png":               "pic.png",
@@ -245,4 +217,32 @@ func TestUploadToS3FatalOnMissingConfig(t *testing.T) {
 		}
 		_, _ = UploadToS3(&multipart.FileHeader{}, "prefix/")
 	})
+}
+
+func fileHeader(t *testing.T, filename string, content []byte) *multipart.FileHeader {
+	t.Helper()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if err := req.ParseMultipartForm(32 << 20); err != nil {
+		t.Fatalf("parse multipart form: %v", err)
+	}
+	_, header, err := req.FormFile("file")
+	if err != nil {
+		t.Fatalf("form file: %v", err)
+	}
+	return header
 }

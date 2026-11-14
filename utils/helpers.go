@@ -19,7 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// HashSecret is bcrypt, salt embedded in the hash.
+// HashSecret is bcrypt, salt embedded in the hash
 func HashSecret(secret string) (string, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), 12)
 	if err != nil {
@@ -28,12 +28,12 @@ func HashSecret(secret string) (string, error) {
 	return string(hashed), nil
 }
 
-// VerifySecret accepts only bcrypt hashes; anything else returns false.
+// VerifySecret accepts only bcrypt hashes; anything else returns false
 func VerifySecret(stored, candidate string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(stored), []byte(candidate)) == nil
 }
 
-// RandomString concatenates crypto/rand.Text() chunks: unbiased base32, may split a chunk.
+// RandomString concatenates crypto/rand.Text() chunks: unbiased base32, may split a chunk
 func RandomString(length uint) string {
 	var out strings.Builder
 	for uint(out.Len()) < length {
@@ -42,7 +42,7 @@ func RandomString(length uint) string {
 	return out.String()[:length]
 }
 
-// SafeFilename keeps the last path component and drops control characters.
+// SafeFilename keeps the last path component and drops control characters
 func SafeFilename(name string) string {
 	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
 	name = strings.Map(func(r rune) rune {
@@ -59,7 +59,7 @@ func SafeFilename(name string) string {
 	return name
 }
 
-// UploadToS3 returns the stored path; build URLs from it, not from the request.
+// UploadToS3 returns the stored path; build URLs from it, not from the request
 func UploadToS3(fileHeader *multipart.FileHeader, prefix string) (string, error) {
 	client, bucket := s3Target()
 	filePath := prefix + SafeFilename(fileHeader.Filename)
@@ -90,7 +90,6 @@ func UploadToS3(fileHeader *multipart.FileHeader, prefix string) (string, error)
 	return filePath, nil
 }
 
-// s3Target builds the client and bucket from env; missing settings are fatal.
 func s3Target() (*s3.Client, string) {
 	bucket := os.Getenv("AWS_BUCKET")
 	region := os.Getenv("AWS_REGION")

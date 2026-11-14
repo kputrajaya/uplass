@@ -18,7 +18,7 @@ import (
 
 const testAssetHost = "https://cdn.test/"
 
-// newTestApp mirrors the main.go route table.
+// newTestApp mirrors the main.go route table
 func newTestApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit: FileSizeMax + (1 << 20),
@@ -29,7 +29,6 @@ func newTestApp() *fiber.App {
 	return app
 }
 
-// setupDB points the handlers at a throwaway in-memory database.
 func setupDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -43,7 +42,7 @@ func setupDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("db pool: %v", err)
 	}
-	// One connection keeps the ":memory:" database alive for the whole test.
+	// One connection keeps the ":memory:" database alive for the whole test
 	sdb.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sdb.Close() })
 
@@ -67,7 +66,6 @@ type fixture struct {
 	upload *uploadCall
 }
 
-// newFixture seeds one app plus one token and stubs the S3 upload.
 func newFixture(t *testing.T, uploadErr error) *fixture {
 	t.Helper()
 
@@ -114,7 +112,6 @@ type uploadCall struct {
 	size   int64
 }
 
-// stubUpload replaces the S3 uploader for the duration of the test.
 func stubUpload(t *testing.T, err error) *uploadCall {
 	t.Helper()
 
