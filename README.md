@@ -4,10 +4,15 @@ Asset upload API, storage, and delivery for multiple apps.
 
 ## Creating an App
 
-To use Uplass, setup the environment variables (`.env`) then create an app.
+To use Uplass, create an app: hash the app secret, then insert the row into the `apps` table.
 
 ```sh
-$ go run commands/create_app/main.go [app_key] [app_secret]
+$ go run ./commands/hash_secret 'my-secret'
+<hash result>
+```
+
+```sql
+INSERT INTO apps (app_key, app_secret) VALUES ('my-key', '<hash result above>');
 ```
 
 ## Uploading a File

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/subtle"
 	"errors"
 	"log"
 	"os"
@@ -45,7 +44,7 @@ func GetToken(c *fiber.Ctx) error {
 		log.Println(err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to validate app")
 	}
-	if subtle.ConstantTimeCompare([]byte(app.AppSecret), []byte(utils.HashString(data.AppSecret))) != 1 {
+	if !utils.VerifySecret(app.AppSecret, data.AppSecret) {
 		return fiber.NewError(fiber.StatusBadRequest, "App is not valid")
 	}
 

@@ -59,7 +59,12 @@ func testDB(t *testing.T) *gorm.DB {
 func seedApp(t *testing.T, db *gorm.DB, key, secret string) models.App {
 	t.Helper()
 
-	app := models.App{AppKey: key, AppSecret: utils.HashString(secret)}
+	hashed, err := utils.HashSecret(secret)
+	if err != nil {
+		t.Fatalf("hash secret: %v", err)
+	}
+
+	app := models.App{AppKey: key, AppSecret: hashed}
 	if err := db.Create(&app).Error; err != nil {
 		t.Fatalf("create app: %v", err)
 	}
@@ -188,6 +193,9 @@ func TestGetToken(t *testing.T) {
 		}
 		if stored.Used {
 			t.Fatal("new token is already marked as used")
+		}
+		if !strings.HasPrefix(created.AppSecret, "$2") {
+			t.Fatalf("stored app secret is not a bcrypt hash: %q", created.AppSecret)
 		}
 	})
 

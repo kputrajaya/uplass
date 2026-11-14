@@ -2,8 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/base64"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -15,19 +13,28 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"golang.org/x/crypto/bcrypt"
 )
 
-const randomCharPool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const RandomCharPool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const SecretHashCost = 12
 
-func HashString(input string) string {
-	hashed := sha256.Sum256([]byte(input))
-	return base64.StdEncoding.EncodeToString(hashed[:])
+func HashSecret(secret string) (string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), SecretHashCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
+}
+
+func VerifySecret(stored, candidate string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(stored), []byte(candidate)) == nil
 }
 
 func RandomString(length uint) string {
 	bytes := make([]byte, length)
 	for i := range bytes {
-		bytes[i] = randomCharPool[rand.Intn(len(randomCharPool))]
+		bytes[i] = RandomCharPool[rand.Intn(len(RandomCharPool))]
 	}
 	return string(bytes)
 }

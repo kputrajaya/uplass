@@ -5,17 +5,44 @@ import (
 	"testing"
 )
 
-func TestHashString(t *testing.T) {
-	const emptySHA256 = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
-	if got := HashString(""); got != emptySHA256 {
-		t.Fatalf("HashString(\"\") = %q, want %q", got, emptySHA256)
+func TestHashSecret(t *testing.T) {
+	hashed, err := HashSecret("s3cret")
+	if err != nil {
+		t.Fatalf("HashSecret: %v", err)
+	}
+	if hashed == "s3cret" {
+		t.Fatal("HashSecret returned the plain secret")
+	}
+	if !strings.HasPrefix(hashed, "$2") {
+		t.Fatalf("HashSecret = %q, want a bcrypt hash", hashed)
 	}
 
-	if HashString("bar") != HashString("bar") {
-		t.Fatal("HashString is not deterministic")
+	second, err := HashSecret("s3cret")
+	if err != nil {
+		t.Fatalf("HashSecret: %v", err)
 	}
-	if HashString("bar") == HashString("baz") {
-		t.Fatal("HashString collides for different inputs")
+	if second == hashed {
+		t.Fatal("HashSecret is not salted: two hashes of the same secret matched")
+	}
+}
+
+func TestVerifySecret(t *testing.T) {
+	hashed, err := HashSecret("s3cret")
+	if err != nil {
+		t.Fatalf("HashSecret: %v", err)
+	}
+
+	if !VerifySecret(hashed, "s3cret") {
+		t.Fatal("VerifySecret rejected the correct secret")
+	}
+	if VerifySecret(hashed, "wrong") {
+		t.Fatal("VerifySecret accepted a wrong secret")
+	}
+	if VerifySecret(hashed, "") {
+		t.Fatal("VerifySecret accepted an empty secret")
+	}
+	if VerifySecret("", "s3cret") {
+		t.Fatal("VerifySecret accepted an empty stored hash")
 	}
 }
 
@@ -26,7 +53,7 @@ func TestRandomString(t *testing.T) {
 			t.Fatalf("len(RandomString(50)) = %d, want 50", len(got))
 		}
 		for _, r := range got {
-			if !strings.ContainsRune(randomCharPool, r) {
+			if !strings.ContainsRune(RandomCharPool, r) {
 				t.Fatalf("RandomString produced character %q outside pool", r)
 			}
 		}
