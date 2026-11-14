@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/kputrajaya/uplass/models"
 	"github.com/kputrajaya/uplass/utils"
 	"gorm.io/gorm"
@@ -18,14 +18,14 @@ const FileSizeMax = 10 * 1024 * 1024
 
 var uploadToS3 = utils.UploadToS3
 
-func Ping(c *fiber.Ctx) error {
+func Ping(c fiber.Ctx) error {
 	return c.SendString("Pong")
 }
 
-func GetToken(c *fiber.Ctx) error {
+func GetToken(c fiber.Ctx) error {
 	// Parse body
 	data := models.App{}
-	if err := c.BodyParser(&data); err != nil {
+	if err := c.Bind().Body(&data); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse body")
 	}
 	if data.AppKey == "" || data.AppSecret == "" {
@@ -57,7 +57,7 @@ func GetToken(c *fiber.Ctx) error {
 	return c.SendString(token.Value)
 }
 
-func UploadAsset(c *fiber.Ctx) error {
+func UploadAsset(c fiber.Ctx) error {
 	tokenValue := c.FormValue("token")
 	if tokenValue == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "Token not provided")

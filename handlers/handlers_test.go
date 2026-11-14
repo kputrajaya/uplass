@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/kputrajaya/uplass/models"
 	"github.com/kputrajaya/uplass/utils"
 	"gorm.io/gorm"
@@ -134,7 +134,7 @@ func doUpload(t *testing.T, app *fiber.App, tokenValue, filename string, content
 	req := httptest.NewRequest(fiber.MethodPost, "/upload", body)
 	req.Header.Set(fiber.HeaderContentType, writer.FormDataContentType())
 
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestGetToken(t *testing.T) {
 			strings.NewReader(`{"AppKey":"app-key","AppSecret":"s3cret"}`))
 		req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
-		resp, err := app.Test(req, -1)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestGetToken(t *testing.T) {
 			strings.NewReader(`{"AppKey":"app-key","AppSecret":"wrong"}`))
 		req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
-		resp, err := app.Test(req, -1)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test: %v", err)
 		}
@@ -229,7 +229,7 @@ func TestGetToken(t *testing.T) {
 			strings.NewReader(`{"AppKey":"app-key"}`))
 		req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
-		resp, err := app.Test(req, -1)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test: %v", err)
 		}
