@@ -72,7 +72,8 @@ func TestRateLimitPerClient(t *testing.T) {
 		return resp.StatusCode, string(body[:n]), resp.Header.Get(fiber.HeaderRetryAfter)
 	}
 
-	for i := 0; i < uploadRateLimit; i++ {
+	const attemptsPerMinute = 10
+	for i := 0; i < attemptsPerMinute; i++ {
 		if code, _, _ := post("203.0.113.7"); code != fiber.StatusBadRequest {
 			t.Fatalf("request %d = %d, want 400", i+1, code)
 		}

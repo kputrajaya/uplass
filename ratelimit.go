@@ -8,19 +8,11 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 )
 
-const (
-	// tokenRateLimit allows 20 token attempts per client per minute.
-	tokenRateLimit = 20
-	// uploadRateLimit allows 20 upload attempts per client per minute.
-	uploadRateLimit = 20
-	rateLimitWindow = time.Minute
-)
-
 // rateLimiter allows max requests per client per window.
 func rateLimiter(max int) fiber.Handler {
 	return limiter.New(limiter.Config{
 		Max:          max,
-		Expiration:   rateLimitWindow,
+		Expiration:   time.Minute,
 		KeyGenerator: clientKey,
 		LimitReached: func(c fiber.Ctx) error {
 			c.Set(fiber.HeaderRetryAfter, "60")

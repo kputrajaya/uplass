@@ -19,16 +19,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	// S3UploadTimeout caps one PutObject call.
-	S3UploadTimeout = 30 * time.Second
-	// secretHashCost is the bcrypt cost for stored app secrets.
-	secretHashCost = 12
-)
-
-// HashSecret is bcrypt at secretHashCost, salt embedded in the hash.
+// HashSecret is bcrypt, salt embedded in the hash.
 func HashSecret(secret string) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), secretHashCost)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), 12)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +75,7 @@ func UploadToS3(fileHeader *multipart.FileHeader, prefix string) (string, error)
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), S3UploadTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	_, err = client.PutObject(ctx, &s3.PutObjectInput{

@@ -22,8 +22,8 @@ func newApp() *fiber.App {
 
 	app.Get("/ping", handlers.Ping)
 
-	app.Post("/token", rateLimiter(tokenRateLimit), handlers.GetToken)
-	app.Post("/upload", rateLimiter(uploadRateLimit), handlers.UploadAsset)
+	app.Post("/token", rateLimiter(10), handlers.GetToken)
+	app.Post("/upload", rateLimiter(10), handlers.UploadAsset)
 
 	return app
 }
