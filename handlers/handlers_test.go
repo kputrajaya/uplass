@@ -161,7 +161,7 @@ func TestUploadAssetRejectsBadRequests(t *testing.T) {
 }
 
 func TestUploadAsset(t *testing.T) {
-	prefixPattern := regexp.MustCompile(`^app-key/\d{4}/\d{2}/\d{2}/[A-Z2-7]{5}/$`)
+	prefixPattern := regexp.MustCompile(`^app-key/\d{4}/\d{2}/\d{2}/[A-Z2-7]{10}/$`)
 
 	t.Run("success", func(t *testing.T) {
 		f := newFixture(t, nil)
@@ -175,7 +175,7 @@ func TestUploadAsset(t *testing.T) {
 			t.Fatal("S3 upload was not called")
 		}
 		if !prefixPattern.MatchString(f.upload.prefix) {
-			t.Fatalf("prefix = %q, want <app_key>/YYYY/MM/DD/<5 base32>/", f.upload.prefix)
+			t.Fatalf("prefix = %q, want <app_key>/YYYY/MM/DD/<10 base32>/", f.upload.prefix)
 		}
 		if f.upload.name != "pic.png" || f.upload.size != int64(len("hello")) {
 			t.Fatalf("uploaded %q (%d bytes), want pic.png (5 bytes)", f.upload.name, f.upload.size)

@@ -98,7 +98,7 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load app")
 	}
 
-	// Object path: <app_key>/YYYY/MM/DD/<5 random chars>/<filename>.
+	// Object path: <app_key>/YYYY/MM/DD/<10 random chars>/<filename>.
 	prefix := app.AppKey + time.Now().Format("/2006/01/02/") + utils.RandomString(10) + "/"
 	filePath, err := uploadToS3(fileHeader, prefix)
 	if err != nil {
