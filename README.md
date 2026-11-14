@@ -40,4 +40,4 @@ image_url = response.text
 
 - [Go Fiber](https://gofiber.io/)
 - [GORM](https://gorm.io/index.html)
-- [AWS SDK for Go](https://github.com/aws/aws-sdk-go)
+- [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2)

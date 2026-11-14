@@ -138,6 +138,26 @@ func fileHeader(t *testing.T, filename string, content []byte) *multipart.FileHe
 	return header
 }
 
+func TestSafeFilename(t *testing.T) {
+	cases := map[string]string{
+		"pic.png":               "pic.png",
+		"../evil.png":           "evil.png",
+		"../../etc/passwd":      "passwd",
+		`C:\Users\HomePC\a.txt`: "a.txt",
+		"dir/sub/file.jpg":      "file.jpg",
+		"a\x01b\x7f.png":        "ab.png",
+		"":                      "file",
+		".":                     "file",
+		"..":                    "file",
+		"/":                     "file",
+	}
+	for in, want := range cases {
+		if got := SafeFilename(in); got != want {
+			t.Fatalf("SafeFilename(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestUploadToS3(t *testing.T) {
 	t.Setenv("AWS_BUCKET", "test-bucket")
 	t.Setenv("AWS_REGION", "ap-southeast-1")
@@ -158,8 +178,12 @@ func TestUploadToS3(t *testing.T) {
 		t.Setenv("AWS_ENDPOINT", server.URL)
 
 		header := fileHeader(t, "pic.png", []byte("hello"))
-		if err := UploadToS3(header, "app-key/2026/01/01/ABCDE/"); err != nil {
+		filePath, err := UploadToS3(header, "app-key/2026/01/01/ABCDE/")
+		if err != nil {
 			t.Fatalf("UploadToS3: %v", err)
+		}
+		if want := "app-key/2026/01/01/ABCDE/pic.png"; filePath != want {
+			t.Fatalf("filePath = %q, want %q", filePath, want)
 		}
 
 		if want := "/test-bucket/app-key/2026/01/01/ABCDE/pic.png"; gotPath != want {
@@ -181,8 +205,35 @@ func TestUploadToS3(t *testing.T) {
 		t.Setenv("AWS_ENDPOINT", server.URL)
 
 		header := fileHeader(t, "pic.png", []byte("hello"))
-		if err := UploadToS3(header, "app-key/"); err == nil {
+		filePath, err := UploadToS3(header, "app-key/")
+		if err == nil {
 			t.Fatal("UploadToS3 returned nil for a failing endpoint")
+		}
+		if filePath != "" {
+			t.Fatalf("filePath = %q, want empty on failure", filePath)
+		}
+	})
+
+	t.Run("sanitises the object key", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+		t.Setenv("AWS_ENDPOINT", server.URL)
+
+		header := fileHeader(t, "../evil.png", []byte("hello"))
+		filePath, err := UploadToS3(header, "app-key/2026/01/01/ABCDE/")
+		if err != nil {
+			t.Fatalf("UploadToS3: %v", err)
+		}
+		if want := "app-key/2026/01/01/ABCDE/evil.png"; filePath != want {
+			t.Fatalf("filePath = %q, want %q", filePath, want)
+		}
+
+		if want := "/test-bucket/app-key/2026/01/01/ABCDE/evil.png"; gotPath != want {
+			t.Fatalf("path = %q, want %q", gotPath, want)
 		}
 	})
 }
@@ -192,6 +243,6 @@ func TestUploadToS3FatalOnMissingConfig(t *testing.T) {
 		for _, key := range []string{"AWS_BUCKET", "AWS_REGION", "AWS_ACCESS_KEY", "AWS_SECRET_KEY"} {
 			os.Unsetenv(key)
 		}
-		_ = UploadToS3(&multipart.FileHeader{}, "prefix/")
+		_, _ = UploadToS3(&multipart.FileHeader{}, "prefix/")
 	})
 }

@@ -7,8 +7,7 @@ import (
 	"testing"
 )
 
-// runFatalCase re-runs the current test binary with helperEnv=1 and expects the
-// child to die on log.Fatal inside fn.
+// runFatalCase reruns the test binary and expects log.Fatal inside fn.
 func runFatalCase(t *testing.T, helperEnv string, wantOutput string, fn func()) {
 	t.Helper()
 
@@ -23,7 +22,7 @@ func runFatalCase(t *testing.T, helperEnv string, wantOutput string, fn func()) 
 		if strings.HasPrefix(kv, helperEnv+"=") {
 			continue
 		}
-		// Drop anything the function under test would otherwise pick up.
+		// Hide PGSQL_/AWS_ settings the function under test would read.
 		if strings.HasPrefix(kv, "PGSQL_") || strings.HasPrefix(kv, "AWS_") {
 			continue
 		}

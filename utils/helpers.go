@@ -9,7 +9,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -17,8 +19,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const secretHashCost = 12
+const (
+	// S3UploadTimeout caps one PutObject call.
+	S3UploadTimeout = 30 * time.Second
+	// secretHashCost is the bcrypt cost for stored app secrets.
+	secretHashCost = 12
+)
 
+// HashSecret is bcrypt at secretHashCost, salt embedded in the hash.
 func HashSecret(secret string) (string, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(secret), secretHashCost)
 	if err != nil {
@@ -27,10 +35,12 @@ func HashSecret(secret string) (string, error) {
 	return string(hashed), nil
 }
 
+// VerifySecret accepts only bcrypt hashes; anything else returns false.
 func VerifySecret(stored, candidate string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(stored), []byte(candidate)) == nil
 }
 
+// RandomString concatenates crypto/rand.Text() chunks: unbiased base32, may split a chunk.
 func RandomString(length uint) string {
 	var out strings.Builder
 	for uint(out.Len()) < length {
@@ -39,41 +49,73 @@ func RandomString(length uint) string {
 	return out.String()[:length]
 }
 
-func UploadToS3(fileHeader *multipart.FileHeader, prefix string) error {
-	awsBucket := os.Getenv("AWS_BUCKET")
-	awsRegion := os.Getenv("AWS_REGION")
-	awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
-	awsSecretKey := os.Getenv("AWS_SECRET_KEY")
-	if awsBucket == "" || awsRegion == "" || awsAccessKey == "" || awsSecretKey == "" {
+// SafeFilename keeps the last path component and drops control characters.
+func SafeFilename(name string) string {
+	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, name)
+
+	switch name {
+	case "", ".", "..", "/":
+		return "file"
+	}
+	return name
+}
+
+// UploadToS3 returns the stored path; build URLs from it, not from the request.
+func UploadToS3(fileHeader *multipart.FileHeader, prefix string) (string, error) {
+	client, bucket := s3Target()
+	filePath := prefix + SafeFilename(fileHeader.Filename)
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), S3UploadTimeout)
+	defer cancel()
+
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(filePath),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(http.DetectContentType(data)),
+	})
+	if err != nil {
+		return "", err
+	}
+	return filePath, nil
+}
+
+// s3Target builds the client and bucket from env; missing settings are fatal.
+func s3Target() (*s3.Client, string) {
+	bucket := os.Getenv("AWS_BUCKET")
+	region := os.Getenv("AWS_REGION")
+	accessKey := os.Getenv("AWS_ACCESS_KEY")
+	secretKey := os.Getenv("AWS_SECRET_KEY")
+	if bucket == "" || region == "" || accessKey == "" || secretKey == "" {
 		log.Fatal("Invalid AWS settings")
 	}
 
-	// Open file from header
-	file, err := fileHeader.Open()
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	fileBytes, err := io.ReadAll(file)
-	if err != nil {
-		return err
-	}
-
-	// Put file to S3
 	client := s3.NewFromConfig(aws.Config{
-		Region:      awsRegion,
-		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+		Region:      region,
+		Credentials: credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
 	}, func(o *s3.Options) {
 		if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
 			o.BaseEndpoint = aws.String(endpoint)
 			o.UsePathStyle = true
 		}
 	})
-	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket:      aws.String(awsBucket),
-		Key:         aws.String(prefix + fileHeader.Filename),
-		Body:        bytes.NewReader(fileBytes),
-		ContentType: aws.String(http.DetectContentType(fileBytes)),
-	})
-	return err
+
+	return client, bucket
 }

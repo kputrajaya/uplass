@@ -11,6 +11,7 @@ import (
 	"github.com/kputrajaya/uplass/handlers"
 )
 
+// newApp builds the real router for main and tests.
 func newApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit: handlers.FileSizeMax + (1 << 20),
@@ -21,12 +22,13 @@ func newApp() *fiber.App {
 
 	app.Get("/ping", handlers.Ping)
 
-	app.Post("/token", handlers.GetToken)
-	app.Post("/upload", handlers.UploadAsset)
+	app.Post("/token", rateLimiter(tokenRateLimit), handlers.GetToken)
+	app.Post("/upload", rateLimiter(uploadRateLimit), handlers.UploadAsset)
 
 	return app
 }
 
+// listenAddress uses localhost unless PORT is set; Cloud Run needs all interfaces.
 func listenAddress() string {
 	if port := os.Getenv("PORT"); port != "" {
 		return ":" + port

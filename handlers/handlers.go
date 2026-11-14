@@ -13,31 +13,36 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const TokenExpiryHour = 3
-const FileSizeMax = 10 * 1024 * 1024
+const (
+	// FileSizeMax caps one uploaded file; BodyLimit adds 1 MiB for framing.
+	FileSizeMax = 10 * 1024 * 1024
+	// TokenExpiryHour is how long an upload token stays usable.
+	TokenExpiryHour = 3
+)
 
-var getGDB = utils.GetGDB
-var uploadToS3 = utils.UploadToS3
+var (
+	getGDB     = utils.GetGDB
+	uploadToS3 = utils.UploadToS3
+)
 
 func Ping(c fiber.Ctx) error {
 	return c.SendString("Pong")
 }
 
+// GetToken returns a single-use token; the secret is compared here, never in SQL.
 func GetToken(c fiber.Ctx) error {
-	// Parse body
-	data := models.App{}
-	if err := c.Bind().Body(&data); err != nil {
+	body := models.App{}
+	if err := c.Bind().Body(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse body")
 	}
-	if data.AppKey == "" || data.AppSecret == "" {
+	if body.AppKey == "" || body.AppSecret == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "App key or secret not provided")
 	}
 
 	db := getGDB()
 
-	// Validate key and secret; the secret is compared in Go so it never reaches the database
 	app := models.App{}
-	err := db.Select("id", "app_secret").Where("app_key = ?", data.AppKey).Take(&app).Error
+	err := db.Select("id", "app_secret").Where("app_key = ?", body.AppKey).Take(&app).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return fiber.NewError(fiber.StatusBadRequest, "App is not valid")
 	}
@@ -45,11 +50,10 @@ func GetToken(c fiber.Ctx) error {
 		log.Println(err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to validate app")
 	}
-	if !utils.VerifySecret(app.AppSecret, data.AppSecret) {
+	if !utils.VerifySecret(app.AppSecret, body.AppSecret) {
 		return fiber.NewError(fiber.StatusBadRequest, "App is not valid")
 	}
 
-	// Create token
 	token := models.Token{AppID: app.ID, Value: utils.RandomString(50)}
 	if err := db.Create(&token).Error; err != nil {
 		log.Println(err)
@@ -58,6 +62,7 @@ func GetToken(c fiber.Ctx) error {
 	return c.SendString(token.Value)
 }
 
+// UploadAsset spends the token before uploading: a failed upload burns it.
 func UploadAsset(c fiber.Ctx) error {
 	tokenValue := c.FormValue("token")
 	if tokenValue == "" {
@@ -73,12 +78,11 @@ func UploadAsset(c fiber.Ctx) error {
 
 	db := getGDB()
 
-	// Validate and mark token as used atomically
-	firstValidDate := time.Now().Add(-TokenExpiryHour * time.Hour)
+	// Claim the token atomically so a concurrent upload cannot reuse it.
 	token := models.Token{}
 	res := db.Model(&token).
 		Clauses(clause.Returning{Columns: []clause.Column{{Name: "app_id"}}}).
-		Where("value = ? AND used = ? AND created_at >= ?", tokenValue, false, firstValidDate).
+		Where("value = ? AND used = ? AND created_at >= ?", tokenValue, false, time.Now().Add(-TokenExpiryHour*time.Hour)).
 		Update("used", true)
 	if res.Error != nil {
 		log.Println(res.Error)
@@ -94,12 +98,13 @@ func UploadAsset(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load app")
 	}
 
+	// Object path: <app_key>/YYYY/MM/DD/<5 random chars>/<filename>.
 	prefix := app.AppKey + time.Now().Format("/2006/01/02/") + utils.RandomString(5) + "/"
-	if err := uploadToS3(fileHeader, prefix); err != nil {
+	filePath, err := uploadToS3(fileHeader, prefix)
+	if err != nil {
 		log.Println(err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to upload asset")
 	}
 
-	host := os.Getenv("ASSET_HOST")
-	return c.SendString(host + prefix + fileHeader.Filename)
+	return c.SendString(os.Getenv("ASSET_HOST") + filePath)
 }

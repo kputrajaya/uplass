@@ -6,6 +6,7 @@ import (
 	"github.com/kputrajaya/uplass/utils"
 )
 
+// AutoMigrate is additive; it never drops columns.
 func main() {
 	godotenv.Load()
 

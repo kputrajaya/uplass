@@ -11,6 +11,7 @@ import (
 
 var memoizedGDB *gorm.DB
 
+// GetGDB returns the process-wide pool; misconfiguration is fatal.
 func GetGDB() *gorm.DB {
 	if memoizedGDB != nil {
 		return memoizedGDB
