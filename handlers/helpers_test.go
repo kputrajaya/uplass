@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/ncruces/go-sqlite3/gormlite"
 	"github.com/gofiber/fiber/v3"
 	"github.com/kputrajaya/uplass/models"
 	"github.com/kputrajaya/uplass/utils"
@@ -32,7 +32,7 @@ func newTestApp() *fiber.App {
 func setupDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {

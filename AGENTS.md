@@ -105,7 +105,7 @@ PORT                    # optional: default bind is localhost:8080, containers n
 
 ## Testing notes
 
-- No server, no CGO, no env vars: `go test ./...` runs everything. `handlers` swaps the `getGDB` seam for `github.com/glebarez/sqlite` in `:memory:` (single connection so the DB survives the test), so the whole token/upload flow — bcrypt verify, token creation, single-use marking, expiry, burned-on-failure, soft-deleted app — is covered without Postgres.
+- No server, no CGO, no env vars: `go test ./...` runs everything. `handlers` swaps the `getGDB` seam for `github.com/ncruces/go-sqlite3/gormlite` in `:memory:` (single connection so the DB survives the test), so the whole token/upload flow - bcrypt verify, token creation, single-use marking, expiry, burned-on-failure, soft-deleted app - is covered without Postgres.
 - S3 is exercised against an `httptest` server via the optional `AWS_ENDPOINT` env var (also usable for MinIO); the normal upload path still goes to AWS.
 - `GetGDB`/`UploadToS3` fatal branches run in a child test-binary process, since `log.Fatal` would kill the test runner.
 - Still only verifiable against a real deployment: real Postgres quirks (pgx DSN/TLS), real S3 credentials and bucket policy.
